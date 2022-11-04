@@ -6,12 +6,12 @@
 
 - 数据集使用：
 
--- Depression_dataset
+  - Depression_dataset
 
--- Reddit_dataset
+  - Reddit_dataset
 
 
--代码参考引用:
+- 代码参考引用:
 
 *Text_GCN:* https://github.com/plkmo/Bible_Text_GCN
 
