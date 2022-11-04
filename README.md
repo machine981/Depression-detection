@@ -1,4 +1,4 @@
-# Depression-detection
+# 抑郁症检测
 
 ## 说明
 
