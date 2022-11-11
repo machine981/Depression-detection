@@ -21,6 +21,9 @@ from utils.main_utils import pad_ts_collate, DepressDataset
 import sys
 sys.path.append('/sdb/nlp21/Project/physical/depression-main/')
 
+device = 'cuda' if torch.cuda.is_available() else 'cpu'
+print(device)
+
 def true_metric_loss(true, no_of_classes, scale=1):
     batch_size = true.size(0)
     true = true.view(batch_size,1)
@@ -111,7 +114,7 @@ def CB_loss(labels, logits, samples_per_cls, no_of_classes, loss_type, beta, gam
         cb_loss = loss_function(logits, labels, no_of_class, scale)
     return cb_loss
 
-def train_loop(model, dataloader, optimizer, device, dataset_len, class_num):
+def train_loop(model, dataloader, optimizer, device, dataset_len, class_num, loss_type):
     model.train()
 
     running_loss = 0.0
@@ -130,7 +133,7 @@ def train_loop(model, dataloader, optimizer, device, dataset_len, class_num):
         output = model(tweet_features, temporal_features, lens, timestamp)
         _, preds = torch.max(output, 1)
 
-        loss = loss_fn(output, labels, labels.unique(return_counts=True)[1].tolist(), class_num)
+        loss = loss_fn(output, labels, labels.unique(return_counts=True)[1].tolist(), class_num, loss_type)
         loss.backward()
         optimizer.step()
 
@@ -143,7 +146,7 @@ def train_loop(model, dataloader, optimizer, device, dataset_len, class_num):
     return epoch_loss, epoch_acc
 
 
-def eval_loop(model, dataloader, device, dataset_len, class_num):
+def eval_loop(model, dataloader, device, dataset_len, class_num, loss_type):
     model.eval()
 
     running_loss = 0.0
@@ -165,7 +168,7 @@ def eval_loop(model, dataloader, device, dataset_len, class_num):
             output = model(tweet_features, temporal_features, lens, timestamp)
 
         _, preds = torch.max(output, 1)
-        loss = loss_fn(output, labels, labels.unique(return_counts=True)[1].tolist(), class_num)
+        loss = loss_fn(output, labels, labels.unique(return_counts=True)[1].tolist(), class_num, loss_type)
         running_loss += loss.item()
         running_corrects += torch.sum(preds == labels.data)
 
@@ -178,14 +181,31 @@ def eval_loop(model, dataloader, device, dataset_len, class_num):
     return epoch_loss, epoch_accuracy, np.hstack(fin_outputs), np.hstack(fin_targets)
 
 
-def loss_fn(output, targets, samples_per_cls, class_num):
+def loss_fn(output, targets, samples_per_cls, class_num, loss_type):
     beta = 0.9999
     gamma = 2.0
     no_of_classes = class_num
-    loss_type = "focal"
+    # loss_type = loss_type
 
     return CB_loss(targets, output, samples_per_cls, no_of_classes, loss_type, beta, gamma)
 
+def grade_f1_score(confusion_mat):
+    G_TP=0
+    G_FN=0
+    G_FP=0
+    for i in range(len(confusion_mat)):
+        for j in range(len(confusion_mat)):
+            if i==j:
+                G_TP+=confusion_mat[i][j]
+            elif i<j:
+                G_FN+= confusion_mat[i][j]
+            elif i>j:
+                G_FP+= confusion_mat[i][j]
+    G_precision = G_TP/(G_TP+G_FP)
+    G_recall = G_TP/(G_TP+G_FN)
+    G_f1 = 2*G_precision*G_recall/(G_precision+G_recall)
+    print(f"***Grade Eval: GP:{G_precision}, GR:{G_recall}, GF:{G_f1}")
+    return {'GP':G_precision, 'GR':G_recall, 'GF':G_f1}
 
 def main(config):
     EPOCHS = config.epochs
@@ -197,11 +217,11 @@ def main(config):
     NUM_LAYERS = config.num_layer
     DROPOUT = config.dropout
     CURRENT = config.current
-
+    LOSS_FUNC = config.loss
     RANDOM = config.random
 
     DATA_DIR = config.data_dir
-
+    DATA_NAME = config.dataset
     CLASS_NUM = config.class_num
     
     SEED = config.seed
@@ -220,11 +240,11 @@ def main(config):
     elif config.base_model == "current":
         model = Current(HIDDEN_DIM, DROPOUT, CLASS_NUM)
     elif config.base_model == "historic-current":
-        model = HistoricCurrent(EMBEDDING_DIM, HIDDEN_DIM, NUM_LAYERS, DROPOUT, config.model, CLASS_NUM)
+        model = HistoricCurrent(EMBEDDING_DIM, HIDDEN_DIM, NUM_LAYERS, DROPOUT, config.model, CLASS_NUM, device)
     else:
         assert False
 
-    with open(os.path.join(DATA_DIR, 'data/processed_reddit_data.pkl'), "rb") as f:
+    with open(os.path.join(DATA_DIR, f'data/processed_{DATA_NAME}_data.pkl'), "rb") as f:
         df_total = pickle.load(f)
     
     # with open('/sdb/nlp21/Project/physical/STATENet_Time_Aware_Suicide_Assessment-master/data/samp_data.pkl','rb') as f:
@@ -244,8 +264,6 @@ def main(config):
     val_dataloader = DataLoader(val_dataset, batch_size=BATCH_SIZE, shuffle=True, collate_fn=pad_ts_collate)
     test_dataloader = DataLoader(test_dataset, batch_size=BATCH_SIZE, collate_fn=pad_ts_collate)
 
-    device = 'cuda' if torch.cuda.is_available() else 'cpu'
-    print(device)
 
     LEARNING_RATE = config.learning_rate
 
@@ -266,13 +284,14 @@ def main(config):
     print(scheduler)
 
     for epoch in range(EPOCHS):
-        loss, accuracy = train_loop(model, train_dataloader, optimizer, device, len(train_dataset), CLASS_NUM)
-        eval_loss, eval_accuracy, __, _ = eval_loop(model, val_dataloader, device, len(val_dataset), CLASS_NUM)
+        loss, accuracy = train_loop(model, train_dataloader, optimizer, device, len(train_dataset), CLASS_NUM, LOSS_FUNC)
+        eval_loss, eval_accuracy, __, _ = eval_loop(model, val_dataloader, device, len(val_dataset), CLASS_NUM, LOSS_FUNC)
 
         metric = f1_score(_, __, average="macro")
         recall = recall_score(_, __, average="macro")
         confusion = confusion_matrix(_, __, labels=[0, 1, 2, 3])
         print(confusion)
+        grade_rep = grade_f1_score(confusion)
         if scheduler is not None:
             scheduler.step()
 
@@ -300,10 +319,10 @@ def main(config):
 
     torch.save(model.state_dict(), os.path.join(DATA_DIR, f'checkpoints/saved_model/best_model_{model_name}.pt'))
 
-    _, _, y_pred, y_true = eval_loop(model, val_dataloader, device, len(val_dataset), CLASS_NUM)
+    _, _, y_pred, y_true = eval_loop(model, val_dataloader, device, len(val_dataset), CLASS_NUM, LOSS_FUNC)
 
     report = classification_report(y_true, y_pred, labels=[0, 1, 2, 3], output_dict=True)
-    print(report)
+    # print(report)
     result = {'best_f1': best_metric.item(),
               'lr': LEARNING_RATE,
               'model': str(model),
@@ -317,22 +336,25 @@ def main(config):
               'num_layers': NUM_LAYERS,
               'dropout': DROPOUT,
               'current': CURRENT,
+              'loss':LOSS_FUNC,
               'val_report': report}
 
-    with open(os.path.join(DATA_DIR, f'checkpoints/saved_model/VAL_{model_name}.json'), 'w') as f:
-        json.dump(result, f)
+    # with open(os.path.join(DATA_DIR, f'checkpoints/saved_model/VAL_{model_name}.json'), 'w') as f:
+    #     json.dump(result, f)
 
     if config.test:
-        _, _, y_pred, y_true = eval_loop(model, test_dataloader, device, len(test_dataset), CLASS_NUM)
+        _, _, y_pred, y_true = eval_loop(model, test_dataloader, device, len(test_dataset), CLASS_NUM, LOSS_FUNC)
         confusion = confusion_matrix(y_true, y_pred, labels=[0, 1, 2, 3])
         print(confusion)
 
         report = classification_report(y_true, y_pred, labels=[0, 1, 2, 3], output_dict=True)
         print(report)
+        grade_rep = grade_f1_score(confusion)
         result['test_report'] = report
+        result['grade_report'] = grade_rep
 
         with open(os.path.join(DATA_DIR, f'checkpoints/saved_model/TEST_{model_name}.json'), 'w') as f:
-            json.dump(result, f)
+            json.dump(result, f, indent=2)
 
 
 
@@ -340,21 +362,25 @@ def main(config):
 if __name__ == '__main__':
     base_model_set = {"historic", "historic-current", "current"}
     model_set = {"tlstm", "bilstm", "bilstm-attention"}
+    loss_set = {"focal","softmax","sigmoid","ordinary"}
+    dataset_set = {"reddit","depression","5c"}
 
     parser = argparse.ArgumentParser(description="Temporal Suicidal Modelling")
-    parser.add_argument("-lr", "--learning-rate", default=1e-3, type=float)
-    parser.add_argument("-bs", "--batch-size", default=128, type=int)
+    parser.add_argument("-lr", "--learning-rate", default=1e-4, type=float)
+    parser.add_argument("-bs", "--batch_size", default=128, type=int)
     parser.add_argument("-e", "--epochs", default=300, type=int)
-    parser.add_argument("-hd", "--hidden-dim", default=512, type=int)
+    parser.add_argument("-hd", "--hidden_dim", default=512, type=int)
     parser.add_argument("-ed", "--embedding-dim", default=768, type=int)
-    parser.add_argument("-n", "--num-layer", default=2, type=int)
+    parser.add_argument("-n", "--num_layer", default=2, type=int)
     parser.add_argument("-cn", "--class_num", default=4, type=int)
-    parser.add_argument("-d", "--dropout", default=0.7, type=float)
-    parser.add_argument("--current", action="store_false")
-    parser.add_argument("--base-model", type=str, choices=base_model_set, default="historic")
+    parser.add_argument("-d", "--dropout", default=0.5, type=float)
+    parser.add_argument("--base_model", type=str, choices=base_model_set, default="current")
+    parser.add_argument("--loss", type=str, choices=base_model_set, default="focal")
+    parser.add_argument("--dataset", type=str, choices=base_model_set, default="reddit")
     parser.add_argument("--model", type=str, choices=model_set, default="tlstm")
     parser.add_argument("-t", "--test", action="store_true", default=True)
-    parser.add_argument("--data-dir", type=str, default="/sdb/nlp21/Project/physical/depression-main")
+    parser.add_argument("--current", action="store_false")
+    parser.add_argument("--data_dir", type=str, default="/sdb/nlp21/Project/physical/depression-main")
     parser.add_argument("--random", action="store_true")
     parser.add_argument("--seed", default=1895, type=int)
     config = parser.parse_args()

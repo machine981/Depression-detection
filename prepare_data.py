@@ -20,7 +20,7 @@ class bert_config():
     def __init__(self):
         self.device = 'cuda:1'
         self.data_path = '/sdb/nlp21/Project/physical/depression-main/data/total_reddit_data.json'
-        self.model_path = '/sdb/nlp21/Project/physical/depression-main/checkpoints/pretrain_bert/best_model'
+        self.model_path = '/sdb/nlp21/Project/physical/depression-main/checkpoints/pretrain_bert/reddit_best_model'
 
 class gcn_config():
 # for gcn config
@@ -32,7 +32,7 @@ class gcn_config():
         self.path = '/sdb/nlp21/Project/physical/depression-main/data/encoded_GCN_reddit_data.csv'
         self.num_epochs = 3300
         self.lr = 0.011
-        self.model_no = 2
+        self.model_no = 1
         self.device = 'cuda:1'
         self.dropout = 0
 

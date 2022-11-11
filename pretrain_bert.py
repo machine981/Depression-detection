@@ -17,6 +17,8 @@ import numpy as np
 
 from utils.pretrain_bert_utils import BERT_dataset,train_collate_fn
 
+import setproctitle
+setproctitle.setproctitle('pretrain_BERT_rep')
 
 class BERT_model(object):
     def __init__(self, config):
@@ -41,7 +43,7 @@ class BERT_model(object):
         optimizer, scheduler = self.get_optimizers(len(train_dataloader), self.model)
         global_step = 0
         min_loss=10000
-        last_loss=0
+        last_loss=10000
 
         for epoch in range(self.cfg.epoch_num):
             tr_loss = 0.0
@@ -85,9 +87,10 @@ class BERT_model(object):
             print('Epoch:{}, Train epoch time:{:.2f} min, epoch loss:{:.3f}'.format(epoch, (time.time()-btm)/60, tr_loss))
             current_loss = tr_loss
             # save model checkpoint
-            if (epoch != 0) and (last_loss > current_loss):
+            if last_loss > current_loss:
                 self.save_model(name='reddit_best_model')
                 last_loss = current_loss
+
 
 
     def get_optimizers(self, num_samples, model):

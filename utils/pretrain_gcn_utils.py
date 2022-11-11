@@ -121,7 +121,6 @@ def generate_text_graph(path, window=10, extra_name=''):
     ### tokenize & remove funny characters
     df_data["t"] = df_data["t"].apply(lambda x: nltk.word_tokenize(x)).apply(lambda x: filter_tokens(x, stopwords))
     save_as_pickle(f"{extra_name}_df_data.pkl", df_data)
-    
     ### Tfidf
     logger.info("Calculating Tf-idf...")
     vectorizer = TfidfVectorizer(input="content", max_features=None, tokenizer=dummy_fun, preprocessor=dummy_fun)
@@ -195,5 +194,5 @@ if __name__=="__main__":
     # gen_csv_data(data_path=data_path, mode='reddit')  
     # gen_csv_data(data_path=data_path, mode='partial') 
     # gen_csv_data(data_path=data_path, mode='partial', extra_name='5c')
-    csv_path =  '/sdb/nlp21/Project/physical/depression-main/data/encoded_GCN_reddit_data.csv'
-    generate_text_graph(path=csv_path, extra_name='reddit')
+    csv_path =  '/sdb/nlp21/Project/physical/depression-main/data/encoded_GCN_partial_5cdata.csv'
+    generate_text_graph(path=csv_path, extra_name='5c')

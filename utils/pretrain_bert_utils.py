@@ -32,9 +32,38 @@ def read_data(path, tokenizer, extra_name=''):
 
     return sentence_list
 
+def read_whole_data(tokenizer, extra_name=''):
+    # TODO
+    part_num = 10
+    file_path = ['/sdb/nlp21/Project/physical/depression-main/data/total_5c_data.json',\
+                '/sdb/nlp21/Project/physical/depression-main/data/total_reddit_data.json']
+    data_file = os.path.join('/sdb/nlp21/Project/physical/depression-main/data', f'encoded_BERT_whole_data.json')
+    sentence_list = []
+    if not os.path.exists(data_file):
+        data_list = json.load(open(file_path[0], 'r', encoding='utf-8'))
+        for data in tqdm(data_list):
+            for sent in data['text'][part_num:]:
+                # if len(sent)>5:
+                sent = sent.replace('\n','')
+                encode_sent = tokenizer.encode(sent)
+                sentence_list.append(encode_sent)
+        
+        data_list = json.load(open(file_path[1], 'r', encoding='utf-8'))
+        for data in tqdm(data_list):
+            sent = data['text'].replace('\n','')
+            encode_sent = tokenizer.encode(sent)
+            sentence_list.append(encode_sent)
+        
+        json.dump(sentence_list, open(data_file, 'w'), ensure_ascii=False)
+    else:
+        sentence_list = json.load(open(data_file, 'r', encoding='utf-8'))
+
+    return sentence_list
+
 class BERT_dataset(data.Dataset):
     def __init__(self, path, tokenizer, extra_name=''):
         self.data_info = read_data(path, tokenizer, extra_name)
+        # self.data_info = read_whole_data(tokenizer, extra_name)
 
     def __getitem__(self, index):
         return self.data_info[index]

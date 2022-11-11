@@ -6,6 +6,7 @@ import torch.nn.functional as F
 from torch import nn
 
 
+
 class BiLSTMAttn(nn.Module):
     def __init__(self, embedding_dim, hidden_dim, num_layers, dropout):
         super().__init__()
@@ -58,11 +59,11 @@ class BiLSTM(nn.Module):
 
 
 class HistoricCurrent(nn.Module):
-    def __init__(self, embedding_dim, hidden_dim, num_layers, dropout, model, class_num):
+    def __init__(self, embedding_dim, hidden_dim, num_layers, dropout, model, class_num, device):
         super().__init__()
         self.model = model
         if self.model == "tlstm":
-            self.historic_model = TimeLSTM(embedding_dim, hidden_dim)
+            self.historic_model = TimeLSTM(embedding_dim, hidden_dim, device)
         elif self.model == "bilstm":
             self.historic_model = BiLSTM(embedding_dim, hidden_dim, num_layers, dropout)
         elif self.model == "bilstm-attention":
@@ -139,7 +140,7 @@ class Current(nn.Module):
 
 
 class TimeLSTM(nn.Module):
-    def __init__(self, input_size, hidden_size, bidirectional=True):
+    def __init__(self, input_size, hidden_size, device,bidirectional=True):
         # assumes that batch_first is always true
         super().__init__()
         self.hidden_size = hidden_size
@@ -148,6 +149,7 @@ class TimeLSTM(nn.Module):
         self.U_all = nn.Linear(input_size, hidden_size * 4)
         self.W_d = nn.Linear(hidden_size, hidden_size)
         self.bidirectional = bidirectional
+        self.device = device
 
     #torch.nn.init.kaiming_normal_(W)
 
@@ -159,8 +161,8 @@ class TimeLSTM(nn.Module):
         h = torch.zeros(b, self.hidden_size, requires_grad=False)
         c = torch.zeros(b, self.hidden_size, requires_grad=False)
 
-        h = h.cuda()
-        c = c.cuda()
+        h = h.to(self.device)
+        c = c.to(self.device)
         outputs = []
         for s in range(seq):
             c_s1 = torch.tanh(self.W_d(c))
