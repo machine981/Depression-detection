@@ -1,5 +1,5 @@
 # 抑郁症检测
-
+TIDE: Affective Time-aware Representations for Fine-grained Depression Identification on Social Media
 ## 说明
 
 用于抑郁症严重程度检测
